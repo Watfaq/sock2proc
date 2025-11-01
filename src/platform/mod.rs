@@ -1,32 +1,39 @@
-pub trait FindProc {
-    fn resolve(
-        src: Option<std::net::SocketAddr>,
-        dst: Option<std::net::SocketAddr>,
-        proto: i32,
-    ) -> Option<String>;
-}
-
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
-pub use linux::FindProcImpl;
+pub use linux::find_process_name;
 
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub use macos::FindProcImpl;
+pub use macos::find_process_name;
 
 #[cfg(test)]
 mod tests {
 
-    use super::*;
+    use std::net::TcpListener;
 
     #[test]
-    fn test_compile() {
-        let dst = std::net::SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(8, 8, 8, 8)),
-            80,
-        );
-        let _process_name = FindProcImpl::resolve(None, Some(dst), libc::IPPROTO_TCP);
+    fn test_get_find_tcp_socket() {
+        let socket = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = socket.local_addr().unwrap();
+        let path = super::find_process_name(Some(addr), None, crate::NetworkProtocol::TCP);
+
+        assert!(path.is_some());
+
+        let current_exe = std::env::current_exe().unwrap();
+        assert_eq!(path.unwrap(), current_exe.to_str().unwrap());
+    }
+
+    #[test]
+    fn test_get_find_udp_socket() {
+        let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let addr = socket.local_addr().unwrap();
+        let path = super::find_process_name(Some(addr), None, crate::NetworkProtocol::UDP);
+
+        assert!(path.is_some());
+
+        let current_exe = std::env::current_exe().unwrap();
+        assert_eq!(path.unwrap(), current_exe.to_str().unwrap());
     }
 }

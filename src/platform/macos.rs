@@ -1,8 +1,7 @@
-use libc::{IPPROTO_TCP, IPPROTO_UDP};
 use sysctl::Sysctl;
 
-use crate::utils::{check, is_ipv6};
-use crate::FindProc;
+use crate::utils::{is_ipv6, pre_condition};
+use crate::NetworkProtocol;
 
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -15,28 +14,24 @@ const PROCPIDPATHINFOSIZE: usize = 1024;
 const PROCCALLNUMPIDINFO: i32 = 0x2;
 
 static STRUCT_SIZE: AtomicUsize = AtomicUsize::new(0);
-const STRUCT_SIZE_SETTER: Once = Once::new();
+static STRUCT_SIZE_SETTER: Once = Once::new();
 
-pub struct FindProcImpl;
-
-impl FindProc for FindProcImpl {
-    fn resolve(
-        src: Option<std::net::SocketAddr>,
-        dst: Option<std::net::SocketAddr>,
-        proto: i32,
-    ) -> Option<String> {
-        if !check(src, dst) {
-            return None;
-        }
-        find_process_name(src, dst, proto).ok()
-    }
-}
-
-fn find_process_name(
+pub fn find_process_name(
     src: Option<std::net::SocketAddr>,
     dst: Option<std::net::SocketAddr>,
-    proto: i32,
+    proto: NetworkProtocol,
+) -> Option<String> {
+    find_process_name_inner(src, dst, proto).ok()
+}
+
+fn find_process_name_inner(
+    src: Option<std::net::SocketAddr>,
+    dst: Option<std::net::SocketAddr>,
+    proto: NetworkProtocol,
 ) -> Result<String, io::Error> {
+    if !pre_condition(src, dst) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid input"));
+    }
     STRUCT_SIZE_SETTER.call_once(|| {
         let default = "".to_string();
         let ctl = sysctl::Ctl::new("kern.osrelease").unwrap();
@@ -53,14 +48,8 @@ fn find_process_name(
 
     // see: https://github.com/apple-oss-distributions/xnu/blob/94d3b452840153a99b38a3a9659680b2a006908e/bsd/netinet/in_pcblist.c#L292
     let spath = match proto {
-        IPPROTO_TCP => "net.inet.tcp.pcblist_n",
-        IPPROTO_UDP => "net.inet.udp.pcblist_n",
-        _ => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Invalid network",
-            ))
-        }
+        NetworkProtocol::TCP => "net.inet.tcp.pcblist_n",
+        NetworkProtocol::UDP => "net.inet.udp.pcblist_n",
     };
 
     let is_ipv4 = !is_ipv6(src, dst);
@@ -69,7 +58,12 @@ fn find_process_name(
     let value = ctl.value().unwrap();
     let buf = value.as_struct().unwrap();
     let struct_size = STRUCT_SIZE.load(std::sync::atomic::Ordering::Relaxed);
-    let item_size = struct_size + if proto == IPPROTO_TCP { 208 } else { 0 };
+    let item_size = struct_size
+        + if proto == NetworkProtocol::TCP {
+            208
+        } else {
+            0
+        };
 
     // see https://github.com/apple-oss-distributions/xnu/blob/94d3b452840153a99b38a3a9659680b2a006908e/bsd/netinet/in_pcb.h#L451
     // offset of flag is 44
@@ -144,7 +138,7 @@ fn find_process_name(
 fn get_pid(bytes: &[u8]) -> u32 {
     assert_eq!(bytes.len(), 4);
     let mut pid_bytes = [0; 4];
-    pid_bytes.copy_from_slice(&bytes);
+    pid_bytes.copy_from_slice(bytes);
     if cfg!(target_endian = "big") {
         u32::from_be_bytes(pid_bytes)
     } else {
