@@ -19,6 +19,8 @@ use windows_sys::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
+const MAX_PATH: usize = 260;
+
 pub fn find_process_name(
     src: Option<SocketAddr>,
     dst: Option<SocketAddr>,
@@ -109,7 +111,7 @@ fn find_tcp_v4_pid(
 
         if let Some(addr) = src {
             let local_addr = Ipv4Addr::from(u32::from_be(row.dwLocalAddr));
-            let local_port = u16::from_be((row.dwLocalPort & 0xFFFF) as u16);
+            let local_port = u16::from_be(row.dwLocalPort as u16);
             
             if addr.ip() != IpAddr::V4(local_addr) || addr.port() != local_port {
                 continue;
@@ -118,7 +120,7 @@ fn find_tcp_v4_pid(
 
         if let Some(addr) = dst {
             let remote_addr = Ipv4Addr::from(u32::from_be(row.dwRemoteAddr));
-            let remote_port = u16::from_be((row.dwRemotePort & 0xFFFF) as u16);
+            let remote_port = u16::from_be(row.dwRemotePort as u16);
             
             if addr.ip() != IpAddr::V4(remote_addr) || addr.port() != remote_port {
                 continue;
@@ -186,7 +188,7 @@ fn find_tcp_v6_pid(
 
         if let Some(addr) = src {
             let local_addr = Ipv6Addr::from(row.ucLocalAddr);
-            let local_port = u16::from_be((row.dwLocalPort & 0xFFFF) as u16);
+            let local_port = u16::from_be(row.dwLocalPort as u16);
             
             if addr.ip() != IpAddr::V6(local_addr) || addr.port() != local_port {
                 continue;
@@ -195,7 +197,7 @@ fn find_tcp_v6_pid(
 
         if let Some(addr) = dst {
             let remote_addr = Ipv6Addr::from(row.ucRemoteAddr);
-            let remote_port = u16::from_be((row.dwRemotePort & 0xFFFF) as u16);
+            let remote_port = u16::from_be(row.dwRemotePort as u16);
             
             if addr.ip() != IpAddr::V6(remote_addr) || addr.port() != remote_port {
                 continue;
@@ -263,7 +265,7 @@ fn find_udp_v4_pid(
 
         if let Some(addr) = src {
             let local_addr = Ipv4Addr::from(u32::from_be(row.dwLocalAddr));
-            let local_port = u16::from_be((row.dwLocalPort & 0xFFFF) as u16);
+            let local_port = u16::from_be(row.dwLocalPort as u16);
             
             if addr.ip() != IpAddr::V4(local_addr) || addr.port() != local_port {
                 continue;
@@ -337,7 +339,7 @@ fn find_udp_v6_pid(
 
         if let Some(addr) = src {
             let local_addr = Ipv6Addr::from(row.ucLocalAddr);
-            let local_port = u16::from_be((row.dwLocalPort & 0xFFFF) as u16);
+            let local_port = u16::from_be(row.dwLocalPort as u16);
             
             if addr.ip() != IpAddr::V6(local_addr) || addr.port() != local_port {
                 continue;
@@ -366,7 +368,7 @@ fn get_process_path(pid: u32) -> Result<String, io::Error> {
             return Err(io::Error::last_os_error());
         }
 
-        let mut buffer: Vec<u16> = vec![0; 260]; // MAX_PATH
+        let mut buffer: Vec<u16> = vec![0; MAX_PATH];
         let mut size = buffer.len() as u32;
 
         let result = QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut size);
