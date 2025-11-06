@@ -8,6 +8,11 @@ mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::find_process_name;
 
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(target_os = "windows")]
+pub use windows::find_process_name;
+
 #[cfg(test)]
 mod tests {
 
